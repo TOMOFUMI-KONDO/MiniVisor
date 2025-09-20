@@ -179,6 +179,7 @@ impl Dtb {
 
                     *pointer += len as usize;
                 }
+
                 Self::FDT_END => {
                     return Err(());
                 }
@@ -188,6 +189,12 @@ impl Dtb {
                 }
             }
         }
+    }
+
+    pub fn is_node_operational(&self, node: &DtbNode) -> bool {
+        self.get_property(node, &Self::PROP_STATUS)
+            .map(|p| unsafe { *(p.address as *const [u8; 5]) } == Self::PROP_STATUS_OKAY)
+            .unwrap_or(true) // true if no status
     }
 
     pub fn read_reg_property(&self, node: &DtbNode, index: usize) -> Option<(usize, usize)> {

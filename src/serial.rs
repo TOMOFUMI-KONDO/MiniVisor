@@ -61,6 +61,6 @@ macro_rules! print {
 #[macro_export]
 macro_rules! println {
     () => ($crate::serial::print(format_args!("\n")));
-    ($fmt:expr) => ($crate:serial::print(format_args!("{}\n", format_args!($fmt))));
+    ($fmt:expr) => ($crate::serial::print(format_args!("{}\n", format_args!($fmt))));
     ($fmt:expr, $($arg:tt)*) => ($crate::serial::print(format_args!("{}\n", format_args!($fmt, $($arg)*))));
 }
