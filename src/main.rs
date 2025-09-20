@@ -2,6 +2,10 @@
 #![no_main]
 
 mod dtb;
+mod serial;
+mod drivers {
+    pub mod pl011;
+}
 
 use core::arch::asm;
 
