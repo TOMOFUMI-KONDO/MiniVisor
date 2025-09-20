@@ -63,7 +63,10 @@ extern "C" fn main(argc: usize, argv: *const *const u8) -> usize {
         (&raw mut PL011_DEVICE).as_ref().unwrap().assume_init_ref()
     });
 
+    print!("Hello, world!\n");
+    println!();
     println!("Hello, world!");
+    println!("Hello, {}!", "world");
 
     loop {
         unsafe {
