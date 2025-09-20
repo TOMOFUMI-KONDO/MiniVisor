@@ -125,7 +125,7 @@ impl Dtb {
     }
 
     fn skip_padding(&self, pointer: &mut usize) {
-        *pointer = ((*pointer - 1) & (Self::FDT_TOKEN_BYTE - 1)) + Self::FDT_TOKEN_BYTE;
+        *pointer = ((*pointer - 1) & !(Self::FDT_TOKEN_BYTE - 1)) + Self::FDT_TOKEN_BYTE;
     }
 
     fn _skip_to_next_node(&self, pointer: &mut usize) -> Result<(), ()> {
@@ -408,21 +408,22 @@ impl Dtb {
         let mut address: usize = 0;
         let mut size: usize = 0;
 
-        let offset = ((info.address_cells + info.size_cells) as usize) * size_of::<u32>() * index;
-        if offset + ((info.address_cells + info.size_cells) as usize) * size_of::<u32>()
+        let offset =
+            ((info.address_cells + info.size_cells) as usize) * Self::FDT_TOKEN_BYTE * index;
+        if offset + ((info.address_cells + info.size_cells) as usize) * Self::FDT_TOKEN_BYTE
             > info.len as usize
         {
             return None;
         }
 
-        for i in 0..(info.address_cells as usize * size_of::<u32>()) {
+        for i in 0..(info.address_cells as usize * Self::FDT_TOKEN_BYTE) {
             address <<= 8;
             address |= unsafe { *((info.address + offset + i) as *const u8) } as usize;
         }
-        for i in 0..(info.size_cells as usize * size_of::<u32>()) {
+        for i in 0..(info.size_cells as usize * Self::FDT_TOKEN_BYTE) {
             size <<= 8;
             size |= unsafe {
-                *((info.address + offset + (info.address_cells as usize * size_of::<u32>()) + i)
+                *((info.address + offset + (info.address_cells as usize * Self::FDT_TOKEN_BYTE) + i)
                     as *const u8)
             } as usize;
         }
