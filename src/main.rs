@@ -3,10 +3,14 @@
 
 #[macro_use]
 mod serial;
+mod asm;
 mod dtb;
 mod drivers {
     pub mod pl011;
 }
+mod registers;
+
+use registers::*;
 
 use core::arch::asm;
 use core::ffi::CStr;
@@ -40,6 +44,27 @@ extern "C" fn main(argc: usize, argv: *const *const u8) -> usize {
     println!("Hello, world!");
     println!("Hello, {}!", "world");
 
+    let current_el = asm::get_currentel() >> 2;
+    println!("CurrentEL: {}", current_el);
+    assert_eq!(current_el, 2);
+
+    setup_hypervisor_registers();
+
+    unsafe {
+        // El1h で動作する。
+        // El1h は例外レベルごとに異なるレジスタをスタックポインタとして使うモード
+        // El1t はどの例外レベルでも EL0 用のスタックポインタのレジスタをスタックポインタとして使うモード
+        asm::set_spsr_el2(SPSR_EL2_M_EL1H);
+
+        // ジャンプ先のアドレス
+        asm::set_elr_el2(el1_main as *const fn() as usize as u64);
+
+        // eret で el1_main に
+        asm::eret();
+    }
+}
+
+extern "C" fn el1_main() {
     loop {
         unsafe {
             asm!("wfi");
@@ -110,6 +135,12 @@ fn init_serial_port(dtb: &dtb::Dtb) -> Result<(), usize> {
     });
 
     Ok(())
+}
+
+pub fn setup_hypervisor_registers() {
+    /* HCR_EL2 */
+    let hcr_el2 = HCR_EL2_RW | HCR_EL2_API;
+    unsafe { asm::set_hcr_el2(hcr_el2) };
 }
 
 #[panic_handler]
