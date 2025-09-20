@@ -126,7 +126,7 @@ impl Dtb {
 
         loop {
             self.skip_padding(pointer);
-            self.skip_nop(pointer);
+            self.skip_nop(pointer)?;
 
             match *self.read_node(*pointer)? {
                 Self::FDT_BEGIN_NODE => {
@@ -190,6 +190,40 @@ impl Dtb {
         }
     }
 
+    pub fn read_reg_property(&self, node: &DtbNode, index: usize) -> Option<(usize, usize)> {
+        let info = self.get_property(node, &Self::PROP_REG)?;
+        let mut address: usize = 0;
+        let mut size: usize = 0;
+
+        let offset = ((info.address_cells + info.size_cells) as usize) * size_of::<u32>() * index;
+        if offset + ((info.address_cells + info.size_cells) as usize) * size_of::<u32>()
+            > info.len as usize
+        {
+            return None;
+        }
+
+        for i in 0..(info.address_cells as usize * size_of::<u32>()) {
+            address <<= 8;
+            address |= unsafe { *((info.address + offset + i) as *const u8) } as usize;
+        }
+        for i in 0..(info.size_cells as usize * size_of::<u32>()) {
+            size <<= 8;
+            size |= unsafe {
+                *((info.address + offset + (info.address_cells as usize * size_of::<u32>()) + i)
+                    as *const u8)
+            } as usize;
+        }
+
+        Some((address, size))
+    }
+
+    pub fn is_device_compatible(&self, node: &DtbNode, compatible: &[u8]) -> bool {
+        let Some(info) = self.get_property(node, &Self::PROP_COMPATIBLE) else {
+            return false;
+        };
+        self._is_device_compatible(&info, compatible)
+    }
+
     fn _is_device_compatible(&self, info: &DtbProperty, compatible: &[u8]) -> bool {
         let mut p = 0;
         let mut skip = false;
@@ -215,6 +249,69 @@ impl Dtb {
         }
 
         false
+    }
+
+    pub fn get_property(&self, node: &DtbNode, property_name: &[u8]) -> Option<DtbProperty> {
+        let mut p = node.address;
+        let mut address_cells = node.address_cells;
+        let mut size_cells = node.size_cells;
+
+        loop {
+            self.skip_padding(&mut p);
+            if self.skip_nop(&mut p).is_err() {
+                return None;
+            }
+
+            match *self.read_node(p).ok()? {
+                Self::FDT_BEGIN_NODE => {
+                    return None;
+                }
+
+                Self::FDT_END => {
+                    return None;
+                }
+
+                Self::FDT_END_NODE => {
+                    return None;
+                }
+
+                Self::FDT_PROP => {
+                    p += Self::FDT_TOKEN_BYTE;
+
+                    let len = u32::from_be_bytes(*self.read_node(p).ok()?);
+                    p += size_of::<u32>();
+
+                    let name_segment = u32::from_be_bytes(*self.read_node(p).ok()?);
+                    p += size_of::<u32>();
+
+                    self.check_address_and_size_cells(
+                        name_segment,
+                        p,
+                        &mut address_cells,
+                        &mut size_cells,
+                    )
+                    .ok()?;
+
+                    if self
+                        .compare_name_segment(name_segment, property_name, &[])
+                        .ok()?
+                    {
+                        return Some(DtbProperty {
+                            address: p,
+                            address_cells,
+                            size_cells,
+                            len,
+                        });
+                    }
+
+                    p += len as usize;
+                }
+
+                _ => {
+                    return None;
+                }
+            }
+        }
     }
 
     fn check_address_and_size_cells(
@@ -271,7 +368,7 @@ impl Dtb {
     fn _skip_to_next_node(&self, pointer: &mut usize) -> Result<(), ()> {
         loop {
             self.skip_padding(pointer);
-            self.skip_nop(pointer);
+            self.skip_nop(pointer)?;
 
             match *self.read_node(*pointer)? {
                 Self::FDT_BEGIN_NODE => {
