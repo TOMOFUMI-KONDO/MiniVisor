@@ -58,9 +58,7 @@ extern "C" fn main(argc: usize, argv: *const *const u8) -> usize {
         return 7;
     };
 
-    unsafe {
-        (&raw mut PL011_DEVICE).write(MaybeUninit::new(pl011));
-    };
+    unsafe { (&raw mut PL011_DEVICE).write(MaybeUninit::new(pl011)) };
     serial::init_default_serial_port(unsafe {
         (&raw mut PL011_DEVICE).as_ref().unwrap().assume_init_ref()
     });
