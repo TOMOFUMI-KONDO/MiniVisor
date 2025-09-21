@@ -63,6 +63,10 @@ impl Dtb {
         Ok(Self { header: fdt_header })
     }
 
+    pub fn get_total_size(&self) -> usize {
+        u32::from_be(unsafe { &*(self.header) }.total_size) as usize
+    }
+
     fn compare_name_segment(
         &self,
         name_offset: u32,
@@ -88,6 +92,47 @@ impl Dtb {
             }
         }
 
+        Ok(false)
+    }
+
+    fn compare_string(
+        &self,
+        pointer: &mut usize,
+        name: &[u8],
+        delimiter: &[u8],
+    ) -> Result<bool, ()> {
+        // pointerが示すアドレスにある文字列がnameに一致していればその文字列の最後までポインタを動かす。
+        // 一致していなければ終端文字の次のアドレスまでポインタを動かしてからpaddingをスキップしてfalseを返す。
+        for c in name {
+            if *c != unsafe { *(*pointer as *const u8) } {
+                while unsafe { *(*pointer as *const u8) } != b'\0' {
+                    *pointer += 1;
+                }
+                *pointer += 1;
+                self.skip_padding(pointer);
+                return Ok(false);
+            }
+            *pointer += 1;
+        }
+
+        // nameが一致した次の文字がdelimiterもしくは終端文字であればtrueを返す。
+        let l = unsafe { *(*pointer as *const u8) };
+        for e in delimiter.iter().chain(b"\0") {
+            if *e == l {
+                while unsafe { *(*pointer as *const u8) } != b'\0' {
+                    *pointer += 1;
+                }
+                *pointer += 1;
+                self.skip_padding(pointer);
+                return Ok(true);
+            }
+        }
+
+        while unsafe { *(*pointer as *const u8) } != b'\0' {
+            *pointer += 1;
+        }
+        *pointer += 1;
+        self.skip_padding(pointer);
         Ok(false)
     }
 
@@ -177,6 +222,105 @@ impl Dtb {
             *size_cells = u32::from_be_bytes(*self.read_node(pointer)?);
         }
         Ok(())
+    }
+
+    fn _search_node(
+        &self,
+        node_name: &[u8],
+        pointer: &mut usize,
+        mut address_cells: u32,
+        mut size_cells: u32,
+    ) -> Result<Option<DtbNode>, ()> {
+        self.skip_nop(pointer)?;
+
+        if *self.read_node(*pointer)? != Self::FDT_BEGIN_NODE {
+            return Err(());
+        }
+        *pointer += Self::FDT_TOKEN_BYTE;
+
+        if self.compare_string(pointer, node_name, b"@")? {
+            return Ok(Some(DtbNode {
+                address: *pointer,
+                address_cells,
+                size_cells,
+            }));
+        }
+
+        loop {
+            self.skip_padding(pointer);
+            self.skip_nop(pointer)?;
+
+            match *self.read_node(*pointer)? {
+                Self::FDT_BEGIN_NODE => {
+                    if let Some(i) =
+                        self._search_node(node_name, pointer, address_cells, size_cells)?
+                    {
+                        return Ok(Some(i));
+                    }
+                }
+
+                Self::FDT_END => {
+                    return Err(());
+                }
+
+                Self::FDT_END_NODE => {
+                    *pointer += Self::FDT_TOKEN_BYTE;
+                    return Ok(None);
+                }
+
+                Self::FDT_PROP => {
+                    *pointer += Self::FDT_TOKEN_BYTE;
+
+                    let len = u32::from_be_bytes(*self.read_node(*pointer)?);
+                    *pointer += size_of::<u32>();
+
+                    let name_segment = u32::from_be_bytes(*self.read_node(*pointer)?);
+                    *pointer += size_of::<u32>();
+
+                    self.check_address_and_size_cells(
+                        name_segment,
+                        *pointer,
+                        &mut address_cells,
+                        &mut size_cells,
+                    )?;
+
+                    *pointer += len as usize;
+                }
+
+                _ => {
+                    return Err(());
+                }
+            }
+        }
+    }
+
+    pub fn search_node(&self, node_name: &[u8], current_node: Option<&DtbNode>) -> Option<DtbNode> {
+        let mut pointer;
+        let address_cells;
+        let size_cells;
+
+        if let Some(c) = current_node {
+            pointer = c.address;
+            if self._skip_to_next_node(&mut pointer).is_err() {
+                return None;
+            }
+            address_cells = c.address_cells;
+            size_cells = c.size_cells;
+        } else {
+            pointer = self.get_struct_offset();
+            address_cells = Self::DEFAULT_ADDRESS_CELLS;
+            size_cells = Self::DEFAULT_SIZE_CELLS;
+        };
+
+        while self.read_node(pointer).is_ok() {
+            match self._search_node(node_name, &mut pointer, address_cells, size_cells) {
+                Ok(Some(n)) => return Some(n),
+                Ok(None) => pointer += Self::FDT_TOKEN_BYTE,
+                Err(()) => return None,
+            }
+        }
+
+        None
     }
 
     fn _search_node_by_compatible(

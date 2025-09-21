@@ -25,3 +25,15 @@ pub unsafe fn set_spsr_el2(spsr_el2: u64) {
 pub unsafe fn eret() -> ! {
     unsafe { asm!("eret", options(noreturn)) }
 }
+
+pub fn get_stack_pointer() -> u64 {
+    let sp: u64;
+    unsafe { asm!("mov {}, sp", out(reg) sp) };
+    sp
+}
+
+pub fn get_id_aa64mmfr0_el1() -> u64 {
+    let id_aa64mmfr0_el1: u64;
+    unsafe { asm!("mrs {}, id_aa64mmfr0_el1", out(reg) id_aa64mmfr0_el1) };
+    id_aa64mmfr0_el1
+}
