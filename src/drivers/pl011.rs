@@ -33,7 +33,7 @@ impl Pl011 {
             != 0
     }
 
-    fn is_rx_fifio_empty(&self) -> bool {
+    fn is_rx_fifo_empty(&self) -> bool {
         (unsafe { ptr::read_volatile((self.base_address + UART_FR) as *const u16) } & UART_FR_RXFE)
             != 0
     }
@@ -50,7 +50,7 @@ impl serial::SerialDevice for Pl011 {
     }
 
     fn getc(&self) -> Result<Option<u8>, Error> {
-        if self.is_rx_fifio_empty() {
+        if self.is_rx_fifo_empty() {
             return Ok(None);
         }
 
