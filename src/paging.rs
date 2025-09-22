@@ -180,9 +180,9 @@ fn _map_address_stage2(
             descriptor.set_memory_attribute_write_back();
             descriptor.set_shareability(Shareability::InterShareable);
             descriptor.validate_as_block_descriptor();
-            *physical_address += PAGE_SIZE;
-            *intermediate_physical_address += PAGE_SIZE;
-            *remaining_size -= PAGE_SIZE;
+            *physical_address += block_size;
+            *intermediate_physical_address += block_size;
+            *remaining_size -= block_size;
             if *remaining_size == 0 {
                 return Ok(());
             }
@@ -247,7 +247,7 @@ pub fn map_address_stage2(
         0b00 => 2,
         0b01 => 1,
         0b10 => 0,
-        ob11 => 3,
+        0b11 => 3,
         _ => unreachable!(),
     };
     let num_of_descriptors = number_of_concatenated_page_tables(t0sz, initial_lookup_level) * 512;
