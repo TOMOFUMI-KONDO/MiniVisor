@@ -2,8 +2,11 @@
 //! Stage2 Paging の実装
 //!
 
+use crate::allocate_pages;
 use crate::asm;
 use crate::registers::*;
+
+use core::slice::from_raw_parts_mut;
 
 #[derive(Clone)]
 struct Descriptor(u64);
@@ -80,5 +83,28 @@ pub fn init_stage2_translation_table() {
         0b101 => (16u64, 0i8),
         _ => (16u64, 0i8),
     };
-    // let num_of_descriptors =
+    let number_of_tables = number_of_concatenated_page_tables(t0sz as u8, initial_lookup_level);
+    let table = allocate_pages(number_of_tables, 12 + number_of_tables - 1).unwrap();
+    for d in unsafe { from_raw_parts_mut(table as *mut Descriptor, number_of_tables * 512) } {
+        d.init();
+    }
+
+    let sl0 = if initial_lookup_level == 1 {
+        0b01u64
+    } else {
+        0b10u64
+    };
+    let vtcr_el2: u64 = VTCR_EL2_RES1
+        | (ps << VTCR_EL2_PS_BITS_OFFSET)
+        | (0 << VTCR_EL2_TG0_BITS_OFFSET)
+        | (0b11 << VTCR_EL2_SH0_BITS_OFFSET)
+        | (0b11 << VTCR_EL2_ORG0_BITS_OFFSET)
+        | (0b11 << VTCR_EL2_IRG0_BITS_OFFSET)
+        | (sl0 << VTCR_EL2_SL0_BITS_OFFSET)
+        | (t0sz << VTCR_EL2_T0SZ_BITS_OFFSET);
+
+    unsafe {
+        asm::set_vtcr_el2(vtcr_el2);
+        asm::set_vttbr_el2(table as u64);
+    }
 }
