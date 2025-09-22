@@ -57,3 +57,14 @@ pub fn get_vttbr_el2() -> u64 {
 pub unsafe fn set_vttbr_el2(vttbr_el2: u64) {
     unsafe { asm!("msr vttbr_el2, {}", in(reg) vttbr_el2) };
 }
+
+pub fn flush_tlb_el1() {
+    unsafe {
+        asm!(
+            "
+            dsb ishst
+            tlbi alle1is
+            "
+        );
+    }
+}

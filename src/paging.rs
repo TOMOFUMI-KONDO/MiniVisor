@@ -11,6 +11,15 @@ use core::slice::from_raw_parts_mut;
 #[derive(Clone)]
 struct Descriptor(u64);
 
+#[allow(dead_code)]
+#[derive(Copy, Clone, Eq, PartialEq)]
+#[allow(clippy::enum_variant_names)]
+pub enum Shareability {
+    NonShareable = 0b00,
+    OuterShareable = 0b10,
+    InterShareable = 0b11,
+}
+
 pub const PAGE_SHIFT: usize = 12;
 pub const PAGE_SIZE: usize = 1 << PAGE_SHIFT;
 
@@ -26,6 +35,11 @@ impl Descriptor {
 
     const S2AP_OFFSET: u64 = 6;
     const S2AP: u64 = 0b11 << Self::S2AP_OFFSET;
+
+    const ATTR_INDEX_OFFSET: u64 = 2;
+    const ATTR_INDEX: u64 = 0b1111 << Self::ATTR_INDEX_OFFSET;
+
+    const ATTR_WRITE_BACK: u64 = 0b1111 << Self::ATTR_INDEX_OFFSET;
 
     const fn new() -> Self {
         Self(0)
@@ -55,12 +69,20 @@ impl Descriptor {
         (self.0 & Self::TABLE_ADDRESS_MASK) as usize
     }
 
-    const fn set_output_address(&mut self, output_address: usize) {
+    fn set_output_address(&mut self, output_address: usize) {
         self.0 = (self.0 & !Self::OUTPUT_ADDRESS_MASK) | (output_address as u64) | Self::AF;
     }
 
-    const fn set_permission(&mut self, permission: u64) {
+    fn set_shareability(&mut self, shareability: Shareability) {
+        self.0 = (self.0 & !Self::SH) | ((shareability as u64) << Self::SH_OFFSET);
+    }
+
+    fn set_permission(&mut self, permission: u64) {
         self.0 = (self.0 & !Self::S2AP) | (permission << Self::S2AP_OFFSET);
+    }
+
+    fn set_memory_attribute_write_back(&mut self) {
+        self.0 = (self.0 & !Self::ATTR_INDEX) | Self::ATTR_WRITE_BACK;
     }
 }
 
@@ -107,4 +129,139 @@ pub fn init_stage2_translation_table() {
         asm::set_vtcr_el2(vtcr_el2);
         asm::set_vttbr_el2(table as u64);
     }
+}
+
+fn _map_address_stage2(
+    physical_address: &mut usize,
+    intermediate_physical_address: &mut usize,
+    remaining_size: &mut usize,
+    table_address: usize,
+    permission: u64,
+    level: i8,
+    num_of_descriptors: usize,
+) -> Result<(), ()> {
+    let shift = 12 + 9 * (3 - level as usize);
+    let index = (*intermediate_physical_address >> shift) & (num_of_descriptors - 1);
+    let table = unsafe { from_raw_parts_mut(table_address as *mut Descriptor, num_of_descriptors) };
+
+    if level == 3 {
+        // Paeg Descriptors
+        for descriptor in table[index..num_of_descriptors].iter_mut() {
+            descriptor.init();
+            descriptor.set_output_address(*physical_address);
+            descriptor.set_permission(permission);
+            descriptor.set_memory_attribute_write_back();
+            descriptor.set_shareability(Shareability::InterShareable);
+            descriptor.validate_as_page_descriptor();
+            *physical_address += PAGE_SIZE;
+            *intermediate_physical_address += PAGE_SIZE;
+            *remaining_size -= PAGE_SIZE;
+            if *remaining_size == 0 {
+                break;
+            }
+        }
+
+        return Ok(());
+    }
+
+    for descriptor in table[index..num_of_descriptors].iter_mut() {
+        let block_size = 1usize << shift;
+        let mask = block_size - 1;
+        // FIXME: This should be `level <= 2` ?
+        if level >= 2
+            && *remaining_size >= block_size
+            && (*physical_address & mask) == 0
+            && (*intermediate_physical_address & mask) == 0
+        {
+            // Block Descriptor
+            descriptor.init();
+            descriptor.set_output_address(*physical_address);
+            descriptor.set_permission(permission);
+            descriptor.set_memory_attribute_write_back();
+            descriptor.set_shareability(Shareability::InterShareable);
+            descriptor.validate_as_block_descriptor();
+            *physical_address += PAGE_SIZE;
+            *intermediate_physical_address += PAGE_SIZE;
+            *remaining_size -= PAGE_SIZE;
+            if *remaining_size == 0 {
+                return Ok(());
+            }
+
+            continue;
+        }
+
+        // Table Descriptor
+        let mut next_level_table_address = descriptor.get_next_level_table_address();
+        if !descriptor.is_table_descriptor() {
+            // Translation table の作成
+            next_level_table_address = allocate_pages(1, 12).map_err(|e| {
+                println!("Failed to allocate new translation table: {:?}", e);
+            })?;
+
+            for d in unsafe { from_raw_parts_mut(next_level_table_address as *mut Descriptor, 512) }
+            {
+                d.init();
+            }
+
+            descriptor.init();
+            descriptor.set_output_address(next_level_table_address);
+            descriptor.validate_as_table_descriptor();
+        }
+
+        _map_address_stage2(
+            physical_address,
+            intermediate_physical_address,
+            remaining_size,
+            next_level_table_address,
+            permission,
+            level + 1,
+            512,
+        )?;
+        if *remaining_size == 0 {
+            break;
+        }
+    }
+
+    Ok(())
+}
+
+pub fn map_address_stage2(
+    mut physical_address: usize,
+    mut intermediate_physical_address: usize,
+    mut map_size: usize,
+    is_readable: bool,
+    is_writable: bool,
+) -> Result<(), ()> {
+    if (map_size & ((1usize << PAGE_SHIFT) - 1)) != 0 {
+        println!("Map size is not aligned.");
+        return Err(());
+    }
+
+    // Get translation table address from register.
+    let table_address = (asm::get_vttbr_el2() & VTTBR_BADDR) as usize;
+    // Get translation table attricutes from register.
+    let vtcr_el2 = asm::get_vtcr_el2();
+    let sl0 = ((vtcr_el2 & VTCR_EL2_SL0) >> VTCR_EL2_SL0_BITS_OFFSET) as u8;
+    let t0sz = ((vtcr_el2 & VTCR_EL2_T0SZ) >> VTCR_EL2_T0SZ_BITS_OFFSET) as u8;
+    let initial_lookup_level: i8 = match sl0 {
+        0b00 => 2,
+        0b01 => 1,
+        0b10 => 0,
+        ob11 => 3,
+        _ => unreachable!(),
+    };
+    let num_of_descriptors = number_of_concatenated_page_tables(t0sz, initial_lookup_level) * 512;
+
+    _map_address_stage2(
+        &mut physical_address,
+        &mut intermediate_physical_address,
+        &mut map_size,
+        table_address,
+        ((is_writable as u64) << 1) | (is_readable as u64),
+        initial_lookup_level,
+        num_of_descriptors,
+    )?;
+
+    asm::flush_tlb_el1();
+    Ok(())
 }
