@@ -208,7 +208,7 @@ pub fn setup_exception() {
 }
 
 extern "C" fn synchronous_handler(registers: *mut Registers) {
-    println!("Synchronous Exception!");
+    println!("\nSynchronous Exception!");
     // ELR_EL2 は例外が発生した命令のアドレスが格納されているレジスタ
     println!("Fault at {:#X}", asm::get_elr_el2());
 
