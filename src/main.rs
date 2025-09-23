@@ -9,6 +9,7 @@ mod drivers {
     pub mod pl011;
 }
 mod elf;
+mod exception;
 mod memory_allocator;
 mod paging;
 mod registers;
