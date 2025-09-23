@@ -273,6 +273,26 @@ fn data_abort_handler(registers: &mut Registers, esr_el2: u64) {
         );
     }
 
+    if (0x9000000..0x9001000).contains(&address) {
+        // PL011
+        use crate::mmio::pl011;
+
+        let offset = (address - 0x9000000) as usize;
+
+        if is_write_access {
+            let register_value = if is_64bit_register {
+                *register
+            } else {
+                *register & (u32::MAX as u64)
+            };
+
+            pl011::mmio_write(offset, access_width, register_value)
+                .expect("Failed to handle MMIO Write")
+        } else {
+            *register = pl011::mmio_read(offset, access_width).expect("Failed to handle MMIO Read")
+        }
+    }
+
     // ページフォルトを解消する実装をまだしていないため、戻り先で再びページフォルトの無限ループにならないように、戻り先のアドレスを次の命令にする。
     unsafe {
         asm::advance_elr_el2();
