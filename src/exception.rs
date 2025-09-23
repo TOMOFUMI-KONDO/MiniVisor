@@ -7,6 +7,8 @@ use crate::registers::*;
 
 use core::arch::global_asm;
 
+const DEBUG: bool = false;
+
 #[repr(C)]
 pub struct Registers {
     pub x0: u64,
@@ -208,13 +210,18 @@ pub fn setup_exception() {
 }
 
 extern "C" fn synchronous_handler(registers: *mut Registers) {
-    println!("\nSynchronous Exception!");
-    // ELR_EL2 は例外が発生した命令のアドレスが格納されているレジスタ
-    println!("Fault at {:#X}", asm::get_elr_el2());
+    if DEBUG {
+        println!("\nSynchronous Exception!");
+
+        // ELR_EL2 は例外が発生した命令のアドレスが格納されているレジスタ
+        println!("Fault at {:#X}", asm::get_elr_el2());
+    }
 
     // ESR_EL2 は例外の原因が格納されているレジスタ
     let esr_el2 = asm::get_esr_el2();
-    println!("ESR_EL2: {:#X}", esr_el2);
+    if DEBUG {
+        println!("ESR_EL2: {:#X}", esr_el2);
+    }
 
     let ec = esr_el2 & ESR_EL2_EC;
     match ec {
@@ -254,15 +261,17 @@ fn data_abort_handler(registers: &mut Registers, esr_el2: u64) {
     let address = (((asm::get_hpfar_el2() & HPFAR_EL2_FIPA) >> HPFAR_EL2_FIPA_BITS_OFFSET)
         << crate::paging::PAGE_SHIFT)
         | (asm::get_far_el2() & ((1 << crate::paging::PAGE_SHIFT) - 1));
-    println!(
-        "{:#X} {} {}{}({} Bits)(Value: {:#X})",
-        address,
-        if is_write_access { "<=" } else { "=>" },
-        if is_64bit_register { "X" } else { "W" },
-        register_number,
-        access_width,
-        *register,
-    );
+    if DEBUG {
+        println!(
+            "{:#X} {} {}{}({} Bits)(Value: {:#X})",
+            address,
+            if is_write_access { "<=" } else { "=>" },
+            if is_64bit_register { "X" } else { "W" },
+            register_number,
+            access_width,
+            *register,
+        );
+    }
 
     // ページフォルトを解消する実装をまだしていないため、戻り先で再びページフォルトの無限ループにならないように、戻り先のアドレスを次の命令にする。
     unsafe {
