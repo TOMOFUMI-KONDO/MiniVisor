@@ -6,6 +6,7 @@ mod serial;
 mod asm;
 mod dtb;
 mod drivers {
+    pub mod gicv3;
     pub mod pl011;
 }
 mod elf;
