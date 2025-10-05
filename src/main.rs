@@ -80,6 +80,8 @@ extern "C" fn main(argc: usize, argv: *const *const u8) -> usize {
         .expect("Failed to map memory");
 
     exception::setup_exception();
+    let distributor = init_gic_distributor(&dtb);
+    let redistributor = init_gic_redistributor(&dtb);
 
     setup_hypervisor_registers();
 
@@ -178,7 +180,7 @@ fn init_serial_port(dtb: &dtb::Dtb) -> Result<(), usize> {
 
 pub fn setup_hypervisor_registers() {
     /* HCR_EL2 */
-    let hcr_el2 = HCR_EL2_RW | HCR_EL2_API | HCR_EL2_VM;
+    let hcr_el2 = HCR_EL2_RW | HCR_EL2_API | HCR_EL2_AMO | HCR_EL2_IMO | HCR_EL2_FMO | HCR_EL2_VM;
     unsafe { asm::set_hcr_el2(hcr_el2) };
 }
 
