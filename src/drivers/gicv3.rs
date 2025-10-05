@@ -177,7 +177,7 @@ impl GicRedistributor {
         unsafe { asm::set_icc_sre_el2(asm::get_icc_sre_el2() | Self::ICC_SRE_SRE) };
         // システムレジスタアクセスがサポートされていない場合は自動的に0に書き戻される。
         if (asm::get_icc_sre_el2() & Self::ICC_SRE_SRE) == 0 {
-            panic!("GICv3 System Registers is disabled.")
+            panic!("GICv3 System Registers is disabled.");
         }
 
         self.wait_rwp();

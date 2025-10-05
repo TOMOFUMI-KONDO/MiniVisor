@@ -288,9 +288,9 @@ fn data_abort_handler(registers: &mut Registers, esr_el2: u64) {
             };
 
             pl011::mmio_write(offset, access_width, register_value)
-                .expect("Failed to handle MMIO Write")
+                .expect("Failed to handle MMIO Write");
         } else {
-            *register = pl011::mmio_read(offset, access_width).expect("Failed to handle MMIO Read")
+            *register = pl011::mmio_read(offset, access_width).expect("Failed to handle MMIO Read");
         }
     }
 

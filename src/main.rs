@@ -18,14 +18,13 @@ mod mmio {
 mod paging;
 mod registers;
 
+use drivers::gicv3;
 use registers::*;
 
 use core::arch::asm;
 use core::ffi::CStr;
 use core::mem::MaybeUninit;
 use core::slice;
-
-use crate::drivers::gicv3;
 
 // グローバル変数
 static mut PL011_DEVICE: MaybeUninit<drivers::pl011::Pl011> = MaybeUninit::uninit();
