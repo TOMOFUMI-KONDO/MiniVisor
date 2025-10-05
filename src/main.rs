@@ -25,6 +25,8 @@ use core::ffi::CStr;
 use core::mem::MaybeUninit;
 use core::slice;
 
+use crate::drivers::gicv3;
+
 // グローバル変数
 static mut PL011_DEVICE: MaybeUninit<drivers::pl011::Pl011> = MaybeUninit::uninit();
 static mut MEMORY_ALLOCATOR: memory_allocator::MemoryAllocator =
@@ -259,4 +261,22 @@ pub fn allocate_pages(
 pub fn free_pages(address: usize, number_of_pages: usize) {
     let _ = unsafe { (&raw mut MEMORY_ALLOCATOR).as_mut().unwrap() }
         .free(address, number_of_pages << paging::PAGE_SHIFT);
+}
+
+fn init_gic_distributor(dtb: &dtb::Dtb) -> gicv3::GicDistributor {
+    let gic_node = dtb.search_node_by_compatible(b"arm,gic-v3", None).unwrap();
+    let (base_address, size) = dtb.read_reg_property(&gic_node, 0).unwrap();
+    println!("GIC Distributor's Base Address: {:#X}", base_address);
+    let gic_distributor = gicv3::GicDistributor::new(base_address, size).unwrap();
+    gic_distributor.init();
+    gic_distributor
+}
+
+fn init_gic_redistributor(dtb: &dtb::Dtb) -> gicv3::GicRedistributor {
+    let gic_node = dtb.search_node_by_compatible(b"arm,gic-v3", None).unwrap();
+    let (base_address, size) = dtb.read_reg_property(&gic_node, 1).unwrap();
+    println!("GIC Redistributor's Base Address: {:#X}", base_address);
+    let gic_redistributor = gicv3::get_self_redistributor(base_address, size).unwrap();
+    gic_redistributor.init();
+    gic_redistributor
 }
