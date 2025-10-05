@@ -167,8 +167,8 @@ fn _map_address_stage2(
     for descriptor in table[index..num_of_descriptors].iter_mut() {
         let block_size = 1usize << shift;
         let mask = block_size - 1;
-        // FIXME: This should be `level <= 2` ?
-        if level >= 2
+        // Block Descriptor can be used for level 1 or 2
+        if level >= 1
             && *remaining_size >= block_size
             && (*physical_address & mask) == 0
             && (*intermediate_physical_address & mask) == 0
