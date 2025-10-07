@@ -574,4 +574,22 @@ impl Dtb {
 
         Some((address, size))
     }
+
+    pub fn read_property_as_u8_array(&self, info: &DtbProperty) -> &[u8] {
+        unsafe {
+            core::slice::from_raw_parts(
+                info.address as *const u8,
+                (info.len as usize) / size_of::<u8>(),
+            )
+        }
+    }
+
+    pub fn read_property_as_u32_array(&self, info: &DtbProperty) -> &[u32] {
+        unsafe {
+            core::slice::from_raw_parts(
+                info.address as *const u32,
+                (info.len as usize) / size_of::<u32>(),
+            )
+        }
+    }
 }

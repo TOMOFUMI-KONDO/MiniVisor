@@ -5,6 +5,7 @@
 use crate::asm;
 use crate::drivers::gicv3::GicRedistributor;
 use crate::registers::*;
+use crate::serial::SerialDevice;
 
 use core::arch::global_asm;
 
@@ -302,7 +303,31 @@ fn data_abort_handler(registers: &mut Registers, esr_el2: u64) {
 
 extern "C" fn irq_handler() {
     let (interrupt_number, group) = GicRedistributor::get_acknowledge();
-    // TODO: Handle interrupt
-    println!("Interrupt Number: {interrupt_number}");
+
+    if interrupt_number
+        == unsafe {
+            (&raw mut crate::PL011_DEVICE)
+                .as_ref()
+                .unwrap()
+                .assume_init_ref()
+        }
+        .interrupt_number
+    {
+        let c = unsafe {
+            (&raw mut crate::PL011_DEVICE)
+                .as_ref()
+                .unwrap()
+                .assume_init_ref()
+        }
+        .getc()
+        .unwrap()
+        .unwrap() as char;
+        if c == '\r' {
+            println!()
+        } else {
+            print!("{}", c);
+        }
+    }
+
     GicRedistributor::send_eoi(interrupt_number, group);
 }

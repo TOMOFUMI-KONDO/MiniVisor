@@ -2,7 +2,12 @@
 //! GICv3 割り込み管理モジュール
 //!
 
-use crate::{asm, panic};
+use crate::asm;
+
+pub const DTB_GIC_LEVEL: u32 = 4;
+// CPUコア間で共有する外部デバイス割り込みの割り込み区分
+pub const DTB_GIC_SPI: u32 = 0;
+pub const GIC_SPI_BASE: u32 = 32;
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub enum GicGroup {
@@ -97,6 +102,20 @@ impl GicDistributor {
         };
 
         self.write_register(register + register_index, 1 << register_offset);
+    }
+
+    pub fn set_pending(&self, int_id: u32, pending: bool) {
+        let register_index = ((int_id / u32::BITS) as usize) * size_of::<u32>();
+        let register_offset = int_id & (u32::BITS - 1);
+        let register = if pending {
+            Self::GICD_ISPENDR
+        } else {
+            Self::GICD_ICPENDR
+        };
+        self.write_register(
+            register + register_index,
+            self.read_register(register + register_index) | (1 << register_offset),
+        );
     }
 
     pub fn set_trigger_mode(&self, int_id: u32, is_level_trigger: bool) {
