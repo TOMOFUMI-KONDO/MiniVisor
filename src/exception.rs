@@ -205,10 +205,9 @@ pub fn setup_exception() {
     unsafe extern "C" {
         static exception_table: *const u8;
     }
-    unsafe {
-        // Exception Table のアドレスをセットする。
-        asm::set_vbar_el2(&exception_table as *const _ as usize as u64);
-    }
+
+    // Exception Table のアドレスをセットする。
+    unsafe { asm::set_vbar_el2(&exception_table as *const _ as usize as u64) };
 }
 
 extern "C" fn synchronous_handler(registers: *mut Registers) {
@@ -296,13 +295,15 @@ fn data_abort_handler(registers: &mut Registers, esr_el2: u64) {
     }
 
     // ページフォルトを解消する実装をまだしていないため、戻り先で再びページフォルトの無限ループにならないように、戻り先のアドレスを次の命令にする。
-    unsafe {
-        asm::advance_elr_el2();
-    }
+    unsafe { asm::advance_elr_el2() };
 }
 
 extern "C" fn irq_handler() {
     let (interrupt_number, group) = GicRedistributor::get_acknowledge();
+
+    if DEBUG {
+        println!("Interrupt Number: {interrupt_number}");
+    }
 
     if interrupt_number
         == unsafe {

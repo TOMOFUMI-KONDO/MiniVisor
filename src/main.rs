@@ -26,12 +26,12 @@ use core::ffi::CStr;
 use core::mem::MaybeUninit;
 use core::slice;
 
-// グローバル変数
+/// グローバル変数置き場
 static mut PL011_DEVICE: MaybeUninit<drivers::pl011::Pl011> = MaybeUninit::uninit();
 static mut MEMORY_ALLOCATOR: memory_allocator::MemoryAllocator =
     memory_allocator::MemoryAllocator::new();
 
-// 定数
+/// 定数
 const STACK_SIZE: usize = 0x10000;
 
 #[unsafe(no_mangle)]
@@ -65,22 +65,22 @@ extern "C" fn main(argc: usize, argv: *const *const u8) -> usize {
     println!("CurrentEL: {}", current_el);
     assert_eq!(current_el, 2);
 
-    // メモリ管理のセットアップ
-    // argv[1] はu-bootから渡されたELFヘッダの位置
+    /* メモリ管理のセットアップ */
+    /* argv[1] はu-bootから渡されたELFヘッダの位置 */
     let arg_1 = unsafe { CStr::from_ptr(args[1]) }
         .to_str()
         .expect("Failed to get argv[1]");
     let elf_address = str_to_usize(arg_1).expect("Failed to convert the address");
     setup_memory(&dtb, dtb_address, elf_address, stack_pointer);
 
-    // Stage 2 Translation の初期化
+    /* Stage 2 Translation の初期化 */
     paging::init_stage2_translation_table();
     paging::map_address_stage2(0x40000000, 0x40000000, 0x80000000, true, true)
         .expect("Failed to map memory");
 
     exception::setup_exception();
     let distributor = init_gic_distributor(&dtb);
-    let _redistributor = init_gic_redistributor(&dtb);
+    let redistributor = init_gic_redistributor(&dtb);
 
     enable_serial_port_interrupt(
         unsafe { (&raw mut PL011_DEVICE).as_ref().unwrap().assume_init_ref() },
@@ -90,15 +90,15 @@ extern "C" fn main(argc: usize, argv: *const *const u8) -> usize {
     setup_hypervisor_registers();
 
     unsafe {
-        // El1h で動作する。
-        // El1h は例外レベルごとに異なるレジスタをスタックポインタとして使うモード
-        // El1t はどの例外レベルでも EL0 用のスタックポインタのレジスタをスタックポインタとして使うモード
+        /* El1h で動作する。
+        El1h は例外レベルごとに異なるレジスタをスタックポインタとして使うモード
+        El1t はどの例外レベルでも EL0 用のスタックポインタのレジスタをスタックポインタとして使うモード */
         asm::set_spsr_el2(SPSR_EL2_M_EL1H);
 
-        // ジャンプ先のアドレス
+        /* ジャンプ先のアドレス */
         asm::set_elr_el2(el1_main as *const fn() as usize as u64);
 
-        // eret で el1_main に
+        /* eret で el1_main に */
         asm::eret();
     }
 }
@@ -221,7 +221,7 @@ pub fn setup_memory(dtb: &dtb::Dtb, dtb_address: usize, elf_address: usize, stac
         .free(start, size)
         .expect("Failed to free the RAM");
 
-    // DTBを除外
+    /* DTBを除外 */
     println!(
         "DTB is [{:#X} ~ {:#X}]",
         dtb_address,
@@ -250,7 +250,7 @@ pub fn setup_memory(dtb: &dtb::Dtb, dtb_address: usize, elf_address: usize, stac
         }
     }
 
-    // Stackを除外
+    /* Stackを除外 */
     let stack_end = ((stack_pointer - 1) & !(paging::PAGE_SIZE - 1)) + paging::PAGE_SIZE;
     let stack_start = stack_end - STACK_SIZE;
     println!("Reserve [{:#X} ~ {:#X}] for Stack", stack_start, stack_end);
@@ -314,4 +314,3 @@ fn enable_serial_port_interrupt(
     distributor.set_enable(int_id, true);
     pl011.enable_interrupt();
 }
-

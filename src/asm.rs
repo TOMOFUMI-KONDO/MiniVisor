@@ -101,10 +101,6 @@ pub fn get_hpfar_el2() -> u64 {
     hpfar_el2
 }
 
-pub unsafe fn set_sp_el1(sp_el1: u64) {
-    unsafe { asm!("msr sp_el1, {}", in(reg) sp_el1) };
-}
-
 pub fn get_mpidr_el1() -> u64 {
     let mpidr_el1: u64;
     unsafe { asm!("mrs {}, mpidr_el1", out(reg) mpidr_el1) };
@@ -151,4 +147,3 @@ pub fn get_icc_iar1_el1() -> u64 {
     unsafe { asm!("mrs {}, icc_iar1_el1", out(reg) icc_iar1_el1) };
     icc_iar1_el1
 }
-

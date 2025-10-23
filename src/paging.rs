@@ -1,5 +1,5 @@
 //!
-//! Stage2 Paging の実装
+//! Stage2 Pagingの実装
 //!
 
 use crate::allocate_pages;
@@ -145,7 +145,7 @@ fn _map_address_stage2(
     let table = unsafe { from_raw_parts_mut(table_address as *mut Descriptor, num_of_descriptors) };
 
     if level == 3 {
-        // Paeg Descriptors
+        /* Paeg Descriptor */
         for descriptor in table[index..num_of_descriptors].iter_mut() {
             descriptor.init();
             descriptor.set_output_address(*physical_address);
@@ -173,7 +173,7 @@ fn _map_address_stage2(
             && (*physical_address & mask) == 0
             && (*intermediate_physical_address & mask) == 0
         {
-            // Block Descriptor
+            /* Block Descriptor */
             descriptor.init();
             descriptor.set_output_address(*physical_address);
             descriptor.set_permission(permission);
@@ -190,10 +190,10 @@ fn _map_address_stage2(
             continue;
         }
 
-        // Table Descriptor
+        /* Table Descriptor */
         let mut next_level_table_address = descriptor.get_next_level_table_address();
         if !descriptor.is_table_descriptor() {
-            // Translation table の作成
+            /* Translation table の作成 */
             next_level_table_address = allocate_pages(1, 12).map_err(|e| {
                 println!("Failed to allocate new translation table: {:?}", e);
             })?;

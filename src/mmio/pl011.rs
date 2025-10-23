@@ -9,8 +9,7 @@ pub fn mmio_read(offset: usize, _access_width: u64) -> Result<u64, ()> {
     match offset {
         UART_FR => Ok(0),
         _ => {
-            // unimplemented
-            Err(())
+            Err(()) /* unimplemented */
         }
     }
 }
@@ -22,8 +21,7 @@ pub fn mmio_write(offset: usize, _access_width: u64, value: u64) -> Result<(), (
             Ok(())
         }
         _ => {
-            // unimplemented
-            Err(())
+            Err(()) /* unimplemented */
         }
     }
 }

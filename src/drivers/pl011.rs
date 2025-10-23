@@ -59,7 +59,10 @@ impl Pl011 {
                 UART_CR_RXE | UART_CR_TXE | UART_CR_UARTEN,
             );
             // 割り込みマスクを無効化して割り込みできる状態にする。
-            ptr::write_volatile((self.base_address + UART_IMSC) as *mut u16, UART_IMSC_RXIM);
+            ptr::write_volatile(
+                (self.base_address + UART_IMSC) as *mut u16,
+                ptr::read_volatile((self.base_address + UART_IMSC) as *mut u16) | UART_IMSC_RXIM,
+            );
         }
     }
 }
